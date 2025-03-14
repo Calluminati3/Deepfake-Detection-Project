@@ -1,0 +1,101 @@
+### Step 1: Install Required Libraries
+```python
+!pip install torch torchvision transformers opencv-python numpy tensorflow keras
+```
+
+### Step 2: Load Pre-trained Deepfake Detection Model
+```python
+import torch
+import torchvision.transforms as transforms
+from PIL import Image
+from transformers import AutoModelForImageClassification, AutoFeatureExtractor
+
+# Load model and feature extractor
+model_name = "facebook/deepfake-detection"
+model = AutoModelForImageClassification.from_pretrained(model_name)
+feature_extractor = AutoFeatureExtractor.from_pretrained(model_name)
+
+def preprocess_image(image_path):
+    image = Image.open(image_path).convert("RGB")
+    inputs = feature_extractor(images=image, return_tensors="pt")
+    return inputs
+```
+
+### Step 3: Implement Video Frame Extraction
+```python
+import cv2
+import os
+
+def extract_frames(video_path, output_folder):
+    os.makedirs(output_folder, exist_ok=True)
+    cap = cv2.VideoCapture(video_path)
+    count = 0
+    
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        frame_path = os.path.join(output_folder, f"frame_{count:04d}.jpg")
+        cv2.imwrite(frame_path, frame)
+        count += 1
+    
+    cap.release()
+```
+
+### Step 4: Detect Deepfake in Video Frames
+```python
+def detect_deepfake(image_path):
+    inputs = preprocess_image(image_path)
+    outputs = model(**inputs)
+    probabilities = torch.nn.functional.softmax(outputs.logits, dim=-1)
+    deepfake_score = probabilities[0][1].item()
+    return deepfake_score > 0.5, deepfake_score
+```
+
+### Step 5: Process Video and Detect Deepfake Frames
+```python
+def process_video(video_path, output_folder):
+    extract_frames(video_path, output_folder)
+    
+    deepfake_frames = []
+    for frame in os.listdir(output_folder):
+        frame_path = os.path.join(output_folder, frame)
+        is_deepfake, score = detect_deepfake(frame_path)
+        if is_deepfake:
+            deepfake_frames.append((frame, score))
+    
+    return deepfake_frames
+```
+
+### Step 6: Run the Deepfake Detection System
+```python
+video_path = "test_video.mp4"
+output_folder = "frames"
+deepfake_results = process_video(video_path, output_folder)
+
+for frame, score in deepfake_results:
+    print(f"Deepfake detected in {frame} with confidence {score:.2f}")
+```
+
+### Step 7: Prevent Deepfake Video Spread (Basic AI-Based Watermarking)
+```python
+def add_watermark(frame_path, output_path):
+    frame = cv2.imread(frame_path)
+    watermark_text = "DEEPFAKE DETECTED"
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    cv2.putText(frame, watermark_text, (50, 50), font, 1, (0, 0, 255), 2, cv2.LINE_AA)
+    cv2.imwrite(output_path, frame)
+
+for frame, _ in deepfake_results:
+    frame_path = os.path.join(output_folder, frame)
+    output_path = os.path.join(output_folder, f"watermarked_{frame}")
+    add_watermark(frame_path, output_path)
+```
+
+### Summary:
+1. Extracts video frames.
+2. Uses an AI model to classify frames as real or deepfake.
+3. Flags deepfake frames and prevents their spread by watermarking.
+
+This is a basic **Deepfake Detection & Prevention System** that can be further improved with more advanced AI techniques like GAN-based countermeasures.
